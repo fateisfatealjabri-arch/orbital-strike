@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "orbitalstrike",
+  "version": "${version}",
+  "name": "Orbital Strike",
+  "description": "Wemmbu-inspired Nuke, Stab, and Stasis fishing rods.",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.example.orbitalstrike.OrbitalStrikeMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
