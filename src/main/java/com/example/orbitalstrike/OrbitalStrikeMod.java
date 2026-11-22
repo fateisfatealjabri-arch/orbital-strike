@@ -230,3 +230,84 @@ public class OrbitalStrikeMod implements ModInitializer {
                     }))
                 .then(CommandManager.literal("stasis")
                     .executes(ctx -> {
+                        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+                        player.getInventory().insertStack(createOrbitalRod("stasis"));
+                        ctx.getSource().sendFeedback(() -> Text.literal("Given Stasis Rod."), false);
+                        return 1;
+                    }))
+                .then(CommandManager.literal("all")
+                    .executes(ctx -> {
+                        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+                        player.getInventory().insertStack(createOrbitalRod("nuke"));
+                        player.getInventory().insertStack(createOrbitalRod("stab"));
+                        player.getInventory().insertStack(createOrbitalRod("stasis"));
+                        ctx.getSource().sendFeedback(() -> Text.literal("Given Nuke Rod, Stab Rod, and Stasis Rod."), false);
+                        return 1;
+                    })))
+            .then(CommandManager.literal("stasis")
+                .then(CommandManager.argument("pos", Vec3ArgumentType.vec3())
+                    .executes(ctx -> {
+                        stasisPos = Vec3ArgumentType.getVec3(ctx, "pos");
+                        stasisWorld = ctx.getSource().getWorld();
+                        ctx.getSource().sendFeedback(
+                            () -> Text.literal("Set Stasis Rod destination to " + (int) stasisPos.x + ", " + (int) stasisPos.y + ", " + (int) stasisPos.z + "."),
+                            true
+                        );
+                        return 1;
+                    })))
+            .then(CommandManager.literal("ownership")
+                .then(CommandManager.literal("clear")
+                    .executes(ctx -> {
+                        orbitalOwnerUuid = null;
+                        ctx.getSource().sendFeedback(() -> Text.literal("Cleared orbital ownership."), true);
+                        return 1;
+                    }))
+                .then(CommandManager.argument("player", EntityArgumentType.player())
+                    .executes(ctx -> {
+                        ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "player");
+                        orbitalOwnerUuid = target.getUuid();
+                        ctx.getSource().sendFeedback(
+                            () -> Text.literal("Orbital ownership set to " + target.getName().getString() + "."),
+                            true
+                        );
+                        return 1;
+                    })))
+            .then(CommandManager.literal("settings")
+                .then(CommandManager.literal("nuke")
+                    .then(CommandManager.argument("rings", IntegerArgumentType.integer(1, 25))
+                        .executes(ctx -> {
+                            nukeRingCount = IntegerArgumentType.getInteger(ctx, "rings");
+                            ctx.getSource().sendFeedback(
+                                () -> Text.literal("Set Nuke Rod ring count to " + nukeRingCount + "."),
+                                true
+                            );
+                            return 1;
+                        }))))
+        );
+    }
+
+    private static ItemStack createOrbitalRod(String type) {
+        ItemStack rod = new ItemStack(Items.FISHING_ROD);
+
+        NbtCompound nbt = new NbtCompound();
+        nbt.putString(STRIKE_KEY, type);
+        rod.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
+        rod.set(DataComponentTypes.MAX_DAMAGE, 4);
+        rod.set(DataComponentTypes.DAMAGE, 0);
+
+        switch (type) {
+            case "nuke" -> rod.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Nuke Rod"));
+            case "stab" -> rod.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Stab Rod"));
+            case "stasis" -> rod.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Stasis Rod"));
+        }
+
+        return rod;
+    }
+
+    private static String getStrikeType(ItemStack stack) {
+        NbtComponent customData = stack.get(DataComponentTypes.CUSTOM_DATA);
+        if (customData == null) return null;
+        NbtCompound nbt = customData.copyNbt();
+        return nbt.contains(STRIKE_KEY) ? nbt.getString(STRIKE_KEY).orElse(null) : null;
+    }
+}
