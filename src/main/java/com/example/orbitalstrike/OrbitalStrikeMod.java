@@ -6,8 +6,6 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
 import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.command.argument.Vec3ArgumentType;
 import net.minecraft.component.DataComponentTypes;
@@ -27,10 +25,8 @@ import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.math.random.Random;
-import net.minecraft.world.World;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -41,7 +37,7 @@ import java.util.UUID;
 public class OrbitalStrikeMod implements ModInitializer {
     private static final String STRIKE_KEY = "OrbitalStrikeType";
     private static UUID orbitalOwnerUuid = null;
-    private static int nukeRingCount = 5;
+    private static int nukeRingCount = 6;
 
     private static ServerWorld stasisWorld = null;
     private static Vec3d stasisPos = null;
@@ -104,7 +100,7 @@ public class OrbitalStrikeMod implements ModInitializer {
                     }
                 }
 
-                PENDING_STRIKES.add(new PendingStrike(targetWorld, targetPos, strikeType, 25));
+                PENDING_STRIKES.add(new PendingStrike(targetWorld, targetPos, strikeType, 20));
             }
 
             return ActionResult.PASS;
@@ -146,70 +142,69 @@ public class OrbitalStrikeMod implements ModInitializer {
     }
 
     private static void executeNuke(ServerWorld world, Vec3d pos) {
-        double dropY = Math.min(world.getTopYInclusive() - 5.0, pos.y + 55.0);
-        int fuseTicks = 52;
+        double baseDropY = Math.min(world.getTopYInclusive() - 5.0, pos.y + 68.0);
+        Random random = world.getRandom();
 
-        spawnOrbitalTnt(world, pos.x, dropY, pos.z, 0.0, 0.0, fuseTicks);
+        // Ring 0 (Core Ring): Super-dense solid red ring of ~76 overlapping TNT blocks with an open center hole
+        int coreCount = 76;
+        double coreRadius = 6.2;
+        for (int i = 0; i < coreCount; i++) {
+            double angle = (2.0 * Math.PI * i) / coreCount;
+            double spawnX = pos.x + Math.cos(angle) * coreRadius;
+            double spawnZ = pos.z + Math.sin(angle) * coreRadius;
+            double velX = Math.cos(angle) * 0.08;
+            double velZ = Math.sin(angle) * 0.08;
+            spawnOrbitalTnt(world, spawnX, baseDropY, spawnZ, velX, -1.25, velZ, 56);
+        }
 
-        for (int r = 0; r < nukeRingCount; r++) {
-            double radius = 4.5 + (r * 6.0);
-            int count = 28 + (r * 8);
+        // Outer concentric rings (Rings 1 to nukeRingCount - 1)
+        for (int r = 1; r < nukeRingCount; r++) {
+            double radius = 6.2 + (r * 7.5);
+            int count = 36 + (r * 14);
+            double ringY = Math.min(world.getTopYInclusive() - 4.0, baseDropY + (r * 2.5));
+            int fuse = 56 + (r * 2);
 
             for (int i = 0; i < count; i++) {
-                double angle = (2.0 * Math.PI * i) / count;
-                double spawnX = pos.x + Math.cos(angle) * radius;
-                double spawnZ = pos.z + Math.sin(angle) * radius;
+                double angle = (2.0 * Math.PI * i) / count + (r * 0.13);
+                double jitterR = radius + (random.nextDouble() - 0.5) * 1.1;
+                double spawnX = pos.x + Math.cos(angle) * jitterR;
+                double spawnZ = pos.z + Math.sin(angle) * jitterR;
 
-                double velX = Math.cos(angle) * (radius * 0.012);
-                double velZ = Math.sin(angle) * (radius * 0.012);
+                double radialSpeed = 0.08 + (r * 0.075);
+                double velX = Math.cos(angle) * radialSpeed;
+                double velZ = Math.sin(angle) * radialSpeed;
 
-                spawnOrbitalTnt(world, spawnX, dropY, spawnZ, velX, velZ, fuseTicks);
+                spawnOrbitalTnt(world, spawnX, ringY, spawnZ, velX, -1.25, velZ, fuse);
             }
         }
-    }
-
-    private static void spawnOrbitalTnt(ServerWorld world, double x, double y, double z, double vx, double vz, int fuse) {
-        TntEntity tnt = new TntEntity(world, x, y, z, null);
-        tnt.setFuse(fuse);
-        tnt.setVelocity(vx, -1.1, vz);
-        world.spawnEntity(tnt);
     }
 
     private static void executeStabShot(ServerWorld world, Vec3d pos) {
-        int startY = (int) pos.y + 5;
-        int minY = world.getBottomY();
-        Random random = world.getRandom();
+        // Launch a high-velocity vertical column of primed TNT charges that detonate sequentially down to bedrock
+        double skyY = Math.min(world.getTopYInclusive() - 3.0, pos.y + 42.0);
+        int totalCharges = 55;
 
-        BlockPos.Mutable mutable = new BlockPos.Mutable();
-        for (int y = startY; y >= minY; y--) {
-            double wobbleX = (random.nextDouble() - 0.5) * 0.6;
-            double wobbleZ = (random.nextDouble() - 0.5) * 0.6;
+        for (int i = 0; i < totalCharges; i++) {
+            // Stagger fuse from 14 ticks (surface impact) up to 48 ticks (bedrock floor)
+            int fuse = 14 + (i / 2);
+            // High downward speed so deeper charges punch straight through the crater created by earlier charges
+            double downwardVel = -2.8 - (i * 0.06);
+            double spawnY = Math.min(world.getTopYInclusive() - 2.0, skyY + (i * 0.45));
 
-            for (int dx = -4; dx <= 4; dx++) {
-                for (int dz = -4; dz <= 4; dz++) {
-                    double distSq = (dx + wobbleX) * (dx + wobbleX) + (dz + wobbleZ) * (dz + wobbleZ);
-                    double maxRadiusSq = 10.2 + (random.nextDouble() - 0.5) * 4.2;
-
-                    if (distSq <= maxRadiusSq) {
-                        mutable.set((int) Math.floor(pos.x) + dx, y, (int) Math.floor(pos.z) + dz);
-                        BlockState state = world.getBlockState(mutable);
-                        if (!state.isAir() && state.getHardness(world, mutable) >= 0) {
-                            if (!state.getFluidState().isEmpty()) {
-                                world.setBlockState(mutable, Blocks.AIR.getDefaultState(), 3);
-                            } else {
-                                world.breakBlock(mutable, false);
-                            }
-                        }
-                    }
-                }
+            // Spawn a tight 2-TNT cluster per depth step so it punches through stone & deepslate cleanly
+            spawnOrbitalTnt(world, pos.x, spawnY, pos.z, 0.0, downwardVel, 0.0, fuse);
+            if (i % 2 == 0) {
+                spawnOrbitalTnt(world, pos.x + 0.15, spawnY + 0.2, pos.z - 0.15, 0.0, downwardVel, 0.0, fuse + 1);
             }
-        }
-
-        for (int y = startY; y >= minY; y -= 8) {
-            world.createExplosion(null, pos.x, y, pos.z, 4.0f, false, World.ExplosionSourceType.NONE);
         }
     }
 
+    private static void spawnOrbitalTnt(ServerWorld world, double x, double y, double z, double vx, double vy, double vz, int fuse) {
+        TntEntity tnt = new TntEntity(world, x, y, z, null);
+        tnt.setFuse(fuse);
+        tnt.setVelocity(vx, vy, vz);
+        world.spawnEntity(tnt);
+    }
     private void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(CommandManager.literal("orbital")
             .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
